@@ -1,0 +1,12 @@
+import { Router } from "express";
+import { sendSuccess } from "../utils/response.js";
+
+export const healthRouter = Router();
+
+healthRouter.get("/", (_req, res) => {
+  sendSuccess(res, {
+    status: "ok",
+    service: "femaledaily-scraper-api",
+    timestamp: new Date().toISOString()
+  });
+});

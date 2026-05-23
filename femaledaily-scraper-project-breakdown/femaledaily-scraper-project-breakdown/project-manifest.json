@@ -1,0 +1,45 @@
+{
+  "project": "Metrif Scraper",
+  "primary_color": "#3BE6A6",
+  "stack": {
+    "frontend": [
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS",
+      "Framer Motion",
+      "Custom Tailwind UI components",
+      "Lucide React"
+    ],
+    "scraper_backend": [
+      "Node.js",
+      "Express.js",
+      "Playwright"
+    ],
+    "auth": [
+      "Supabase Anonymous Auth",
+      "hCaptcha"
+    ],
+    "database": "Supabase PostgreSQL with RLS",
+    "deployment": [
+      "Vercel",
+      "Render/Railway/Fly.io",
+      "Supabase"
+    ]
+  },
+  "files": [
+    "README.md",
+    "01-product-requirements.md",
+    "02-system-architecture.md",
+    "03-database-schema.md",
+    "04-ui-design-rules.md",
+    "05-ai-developer-rules.md",
+    "06-api-specification.md",
+    "07-scraper-rules.md",
+    "08-frontend-pages.md",
+    "09-development-roadmap.md",
+    "10-task-checklist.md",
+    "11-env-example.md",
+    "12-mermaid-diagrams.md",
+    "13-readme-for-ai.md"
+  ]
+}
