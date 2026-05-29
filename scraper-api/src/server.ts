@@ -3,6 +3,7 @@ import express from "express";
 import { exportRouter } from "./routes/export.js";
 import { healthRouter } from "./routes/health.js";
 import { jobsRouter } from "./routes/jobs.js";
+import { logsRouter } from "./routes/logs.js";
 import { productsRouter } from "./routes/products.js";
 import { reviewsRouter } from "./routes/reviews.js";
 import { scrapeRouter } from "./routes/scrape.js";
@@ -19,6 +20,7 @@ export function createApp() {
   app.use("/health", healthRouter);
   app.use("/scrape", requireAuth, scrapeRouter);
   app.use("/jobs", requireAuth, jobsRouter);
+  app.use("/logs", requireAuth, logsRouter);
   app.use("/products", requireAuth, productsRouter);
   app.use("/reviews", requireAuth, reviewsRouter);
   app.use("/export", requireAuth, exportRouter);

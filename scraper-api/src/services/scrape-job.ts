@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabase.js";
 import { scrapeFemaleDailyProductPages } from "./scraper.js";
+import { finishJobLog, logJob } from "./job-logger.js";
 import { AppError } from "../utils/app-error.js";
 
 type ExistingReview = {
@@ -52,6 +53,8 @@ export async function runScrapeJob(
       error_message: null
     });
 
+    logJob(jobId, "info", `Job dimulai (mode: ${mode}).`);
+
     // Mode "continue": mulai dari halaman yang lebih dalam berdasarkan jumlah
     // review yang sudah tersimpan, supaya bisa menggali review lama (bukan hanya
     // mengulang review terbaru di halaman 1). FemaleDaily ~10 review per halaman.
@@ -59,6 +62,11 @@ export async function runScrapeJob(
     if (mode === "continue") {
       const existingCount = await countExistingReviews(ownerId, sourceUrl);
       startPage = Math.floor(existingCount / 10) + 1;
+      logJob(
+        jobId,
+        "info",
+        `Mode lanjutkan: ${existingCount} review tersimpan, mulai dari halaman ${startPage}.`
+      );
     }
 
     const result = await withTimeout(
@@ -71,13 +79,16 @@ export async function runScrapeJob(
             requested_reviews: progress.requestedReviews
           });
         },
-        startPage
+        startPage,
+        (level, message) => logJob(jobId, level, message)
       ),
       jobTimeoutMs(requestedReviews),
       "SCRAPE_TIMEOUT"
     );
     const product = await upsertProduct(ownerId, result.product);
-    await insertNewReviews(ownerId, product.id, jobId, result.reviews);
+    logJob(jobId, "info", "Menyimpan review ke database...");
+    const inserted = await insertNewReviews(ownerId, product.id, jobId, result.reviews);
+    logJob(jobId, "success", `${inserted.length} review baru disimpan ke database.`);
 
     await updateJob(jobId, ownerId, {
       status: "success",
@@ -88,11 +99,15 @@ export async function runScrapeJob(
       stop_reason: result.stopReason,
       finished_at: new Date().toISOString()
     });
+    logJob(jobId, "success", `Job selesai. Total review di-scrape: ${result.reviews.length}.`);
+    finishJobLog(jobId);
   } catch (error) {
     const appError =
       error instanceof AppError
         ? error
         : new AppError("UNKNOWN_ERROR", 500, error instanceof Error ? error.message : "Unknown error");
+
+    logJob(jobId, "error", `Job gagal: ${appError.code} - ${appError.message}`);
 
     await updateJob(jobId, ownerId, {
       status: "failed",
@@ -104,6 +119,7 @@ export async function runScrapeJob(
     });
 
     console.error(`Scrape job ${jobId} failed`, appError.message);
+    finishJobLog(jobId);
   }
 }
 

@@ -41,6 +41,9 @@ export type ScrapeProgress = {
   currentPage: number;
 };
 
+export type ScrapeLogLevel = "info" | "success" | "warn" | "error";
+export type ScrapeLogger = (level: ScrapeLogLevel, message: string) => void;
+
 export async function assertPlaywrightAvailable() {
   const browser = await chromium.launch({ headless: true });
   await browser.close();
@@ -272,7 +275,8 @@ export async function scrapeFemaleDailyProductPages(
   sourceUrl: string,
   requestedReviews: number,
   onProgress?: (progress: ScrapeProgress) => Promise<void>,
-  startPage = 1
+  startPage = 1,
+  onLog: ScrapeLogger = () => {}
 ): Promise<MultiPageScrapeResult> {
   const targetReviews = normalizeRequestedReviews(requestedReviews);
   const firstPage = Math.max(Math.floor(startPage), 1);
@@ -287,7 +291,10 @@ export async function scrapeFemaleDailyProductPages(
   const seen = new Set<string>();
   let stopReason: StopReason = "TARGET_REACHED";
 
+  onLog("info", `Target ${targetReviews} review, mulai dari halaman ${firstPage}.`);
+
   try {
+    onLog("info", "Menyalakan browser headless (Chromium)...");
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({
       userAgent:
@@ -295,6 +302,7 @@ export async function scrapeFemaleDailyProductPages(
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     });
     page.setDefaultTimeout(45_000);
+    onLog("success", "Browser siap.");
 
     // Hitung berapa halaman beruntun yang tidak menambah review unik baru.
     // Dipakai sebagai pengaman supaya scraping berhenti hanya kalau benar-benar
@@ -305,11 +313,13 @@ export async function scrapeFemaleDailyProductPages(
       const pageUrl = buildReviewPageUrl(sourceUrl, pageNumber);
 
       try {
+        onLog("info", `Membuka halaman ${pageNumber}...`);
         const result = await scrapeFemaleDailyProductPage(page, pageUrl, sourceUrl);
         product = product ?? result.product;
 
         // Halaman benar-benar tidak punya kartu review sama sekali => review habis.
         if (result.rawReviewCount === 0) {
+          onLog("warn", `Halaman ${pageNumber} tidak punya kartu review. Berhenti.`);
           stopReason = "NO_MORE_REVIEWS";
           break;
         }
@@ -326,6 +336,11 @@ export async function scrapeFemaleDailyProductPages(
           if (reviews.length >= targetReviews) break;
         }
 
+        onLog(
+          "info",
+          `Halaman ${pageNumber}: ${result.rawReviewCount} kartu, ${result.reviews.length} valid, ${addedThisPage} baru. Total ${reviews.length}/${targetReviews}.`
+        );
+
         await onProgress?.({
           collectedReviews: reviews.length,
           requestedReviews: targetReviews,
@@ -334,6 +349,7 @@ export async function scrapeFemaleDailyProductPages(
 
         if (reviews.length >= targetReviews) {
           stopReason = targetReviews >= 250 ? "MAX_LIMIT_REACHED" : "TARGET_REACHED";
+          onLog("success", `Target tercapai di halaman ${pageNumber}.`);
           break;
         }
 
@@ -341,8 +357,13 @@ export async function scrapeFemaleDailyProductPages(
         // tersaring validasi. Beri toleransi beberapa halaman sebelum menyerah.
         if (addedThisPage === 0) {
           consecutiveEmptyPages += 1;
+          onLog(
+            "warn",
+            `Tidak ada review baru di halaman ${pageNumber} (${consecutiveEmptyPages}/3).`
+          );
           if (consecutiveEmptyPages >= 3) {
             stopReason = "NO_MORE_REVIEWS";
+            onLog("warn", "3 halaman beruntun tanpa review baru. Berhenti.");
             break;
           }
         } else {
@@ -351,7 +372,9 @@ export async function scrapeFemaleDailyProductPages(
 
         await page.waitForTimeout(3_000);
       } catch (error) {
+        const detail = error instanceof Error ? error.message : "error tidak diketahui";
         if (reviews.length > 0 && product) {
+          onLog("warn", `Halaman ${pageNumber} gagal dibaca (${detail}). Pakai data yang sudah terkumpul.`);
           stopReason = "PAGE_FAILED";
           break;
         }
@@ -362,6 +385,11 @@ export async function scrapeFemaleDailyProductPages(
     if (!product || !reviews.length) {
       throw new AppError("NO_REVIEWS_FOUND", 404, "No reviews found on the product page");
     }
+
+    onLog(
+      "success",
+      `Selesai mengumpulkan ${reviews.length} review (${stopReason}).`
+    );
 
     return {
       product,

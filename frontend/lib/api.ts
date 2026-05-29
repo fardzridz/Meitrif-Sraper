@@ -133,3 +133,83 @@ export type ScrapeState = {
 export async function checkScrapeState(sourceUrl: string): Promise<ScrapeState> {
   return request<ScrapeState>(`/scrape/check?sourceUrl=${encodeURIComponent(sourceUrl)}`);
 }
+
+export type JobLogEntry = {
+  ts: string;
+  level: "info" | "success" | "warn" | "error";
+  message: string;
+};
+
+/**
+ * Stream log scraping realtime via SSE. Memakai fetch streaming (bukan EventSource)
+ * supaya token Supabase tetap dikirim lewat header Authorization, bukan di URL.
+ * Memanggil onEntry untuk tiap baris log, dan onDone ketika job selesai.
+ * Mengembalikan fungsi untuk membatalkan koneksi.
+ */
+export function streamJobLogs(
+  jobId: string,
+  handlers: { onEntry: (entry: JobLogEntry) => void; onDone?: () => void; onError?: (error: Error) => void }
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    if (!baseUrl) throw new Error("NEXT_PUBLIC_SCRAPER_API_URL is not configured");
+    const token = await getAccessToken();
+
+    const response = await fetch(`${baseUrl}/logs/${jobId}/stream`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Log stream failed with status ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    // Parsing format SSE sederhana: blok dipisah "\n\n", tiap baris bisa
+    // "event: ..." atau "data: ...".
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
+
+      for (const block of blocks) {
+        const lines = block.split("\n");
+        let eventName = "message";
+        let data = "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) data += line.slice(5).trim();
+        }
+
+        if (eventName === "done") {
+          handlers.onDone?.();
+          controller.abort();
+          return;
+        }
+
+        if (data) {
+          try {
+            handlers.onEntry(JSON.parse(data) as JobLogEntry);
+          } catch {
+            // Abaikan baris non-JSON (mis. heartbeat).
+          }
+        }
+      }
+    }
+
+    handlers.onDone?.();
+  })().catch((error) => {
+    if (controller.signal.aborted) return;
+    handlers.onError?.(error instanceof Error ? error : new Error("Log stream error"));
+  });
+
+  return () => controller.abort();
+}

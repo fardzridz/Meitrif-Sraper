@@ -9,8 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
+import { ScrapeTerminal } from "@/components/scrape-terminal";
 import { formatDate, formatJobStatus, formatStopReason, isFemaleDailyReviewUrl } from "@/lib/utils";
-import { checkScrapeState, getJob, getJobs, startScrape, type ScrapeState } from "@/lib/api";
+import {
+  checkScrapeState,
+  getJob,
+  getJobs,
+  startScrape,
+  streamJobLogs,
+  type JobLogEntry,
+  type ScrapeState
+} from "@/lib/api";
 import type { JobStatus, ScrapeJob } from "@/lib/types";
 
 type ScrapeMode = "refresh" | "continue";
@@ -28,6 +37,7 @@ export default function ScrapePage() {
   const [jobsError, setJobsError] = useState("");
   const [activeJobId, setActiveJobId] = useState("");
   const [activeJob, setActiveJob] = useState<ScrapeJob | null>(null);
+  const [logs, setLogs] = useState<JobLogEntry[]>([]);
   const isProcessing = status === "validating" || status === "running";
 
   async function loadJobs() {
@@ -130,6 +140,22 @@ export default function ScrapePage() {
     };
   }, [activeJobId, maxReviews]);
 
+  // Stream log scraping realtime selama job aktif.
+  useEffect(() => {
+    if (!activeJobId) return;
+
+    const stop = streamJobLogs(activeJobId, {
+      onEntry: (entry) => setLogs((current) => [...current, entry]),
+      onError: (streamError) =>
+        setLogs((current) => [
+          ...current,
+          { ts: new Date().toISOString(), level: "warn", message: `Log stream terputus: ${streamError.message}` }
+        ])
+    });
+
+    return () => stop();
+  }, [activeJobId]);
+
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("validating");
@@ -156,6 +182,7 @@ export default function ScrapePage() {
     try {
       const result = await startScrape(url, normalizedMaxReviews, mode);
       setStatus("running");
+      setLogs([]);
       setActiveJobId(result.jobId);
       setActiveJob({
         id: result.jobId,
@@ -351,6 +378,20 @@ export default function ScrapePage() {
           </div>
         </Card>
       </div>
+
+      {logs.length > 0 || isProcessing ? (
+        <section className="mt-6">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-ink">Live scraper log</h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                Output proses scraping langsung dari backend, realtime.
+              </p>
+            </div>
+          </div>
+          <ScrapeTerminal entries={logs} running={isProcessing} />
+        </section>
+      ) : null}
 
       <section className="mt-6">
         <Card className="p-0">
