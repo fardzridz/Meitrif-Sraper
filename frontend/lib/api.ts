@@ -44,15 +44,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   try {
-    const jobs = await request<ScrapeJob[]>("/jobs");
-    const products = await request<Product[]>("/products");
-    return {
-      totalProducts: products.length,
-      totalReviews: products.reduce((total, product) => total + product.total_reviews, 0),
-      successfulJobs: jobs.filter((job) => job.status === "success").length,
-      failedJobs: jobs.filter((job) => job.status === "failed").length,
-      lastScrape: jobs.find((job) => job.finished_at)?.finished_at
-    };
+    return await request<DashboardSummary>("/stats");
   } catch {
     if (!allowMockFallback) throw new Error("Failed to load dashboard summary");
     return mockSummary;

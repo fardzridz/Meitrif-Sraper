@@ -8,6 +8,29 @@ type ExistingReview = {
   rating: number | null;
 };
 
+// Batas waktu keseluruhan satu job scraping. Kalau lewat, job ditandai gagal
+// supaya tidak menggantung di status "running" selamanya.
+const JOB_TIMEOUT_MS = 4 * 60 * 1000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, code: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new AppError(code, 504, `Scrape job exceeded ${Math.round(ms / 1000)}s time limit`));
+    }, ms);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 export async function runScrapeJob(
   jobId: string,
   ownerId: string,
@@ -21,18 +44,24 @@ export async function runScrapeJob(
       error_message: null
     });
 
-    const result = await scrapeFemaleDailyProductPages(sourceUrl, requestedReviews, async (progress) => {
-      await updateJob(jobId, ownerId, {
-        total_reviews: progress.collectedReviews,
-        requested_reviews: progress.requestedReviews
-      });
-    });
+    const result = await withTimeout(
+      scrapeFemaleDailyProductPages(sourceUrl, requestedReviews, async (progress) => {
+        await updateJob(jobId, ownerId, {
+          total_reviews: progress.collectedReviews,
+          requested_reviews: progress.requestedReviews
+        });
+      }),
+      JOB_TIMEOUT_MS,
+      "SCRAPE_TIMEOUT"
+    );
     const product = await upsertProduct(ownerId, result.product);
-    const reviews = await insertNewReviews(ownerId, product.id, jobId, result.reviews);
+    await insertNewReviews(ownerId, product.id, jobId, result.reviews);
 
     await updateJob(jobId, ownerId, {
       status: "success",
-      total_reviews: reviews.length,
+      // total_reviews = jumlah review yang berhasil di-scrape pada job ini,
+      // bukan hanya yang baru masuk DB, supaya job hasil re-scrape tidak tampil 0.
+      total_reviews: result.reviews.length,
       requested_reviews: result.requestedReviews,
       stop_reason: result.stopReason,
       finished_at: new Date().toISOString()

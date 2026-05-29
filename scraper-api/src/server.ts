@@ -6,6 +6,7 @@ import { jobsRouter } from "./routes/jobs.js";
 import { productsRouter } from "./routes/products.js";
 import { reviewsRouter } from "./routes/reviews.js";
 import { scrapeRouter } from "./routes/scrape.js";
+import { statsRouter } from "./routes/stats.js";
 import { requireAuth } from "./middleware/auth.js";
 import { errorHandler, notFoundHandler } from "./utils/error-handler.js";
 
@@ -21,6 +22,7 @@ export function createApp() {
   app.use("/products", requireAuth, productsRouter);
   app.use("/reviews", requireAuth, reviewsRouter);
   app.use("/export", requireAuth, exportRouter);
+  app.use("/stats", requireAuth, statsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
