@@ -27,6 +27,14 @@ export type MultiPageScrapeResult = ScrapeResult & {
   requestedReviews: number;
 };
 
+// Hasil scrape satu halaman + jumlah "kartu review" mentah yang ditemukan
+// di halaman (sebelum validasi teks). Dipakai untuk memutuskan apakah masih
+// ada halaman berikutnya, supaya tidak berhenti hanya karena validasi membuang
+// sebagian review pada satu halaman.
+type PageScrapeResult = ScrapeResult & {
+  rawReviewCount: number;
+};
+
 export type ScrapeProgress = {
   collectedReviews: number;
   requestedReviews: number;
@@ -263,10 +271,16 @@ export async function scrapeFemaleDailyProduct(sourceUrl: string): Promise<Scrap
 export async function scrapeFemaleDailyProductPages(
   sourceUrl: string,
   requestedReviews: number,
-  onProgress?: (progress: ScrapeProgress) => Promise<void>
+  onProgress?: (progress: ScrapeProgress) => Promise<void>,
+  startPage = 1
 ): Promise<MultiPageScrapeResult> {
   const targetReviews = normalizeRequestedReviews(requestedReviews);
-  const totalPages = Math.ceil(targetReviews / 10);
+  const firstPage = Math.max(Math.floor(startPage), 1);
+  // Batas halaman aman: target/10 sebagai dasar, tapi diberi kelonggaran besar
+  // karena sebagian review bisa tersaring oleh validasi teks. Loop tetap berhenti
+  // sendiri begitu halaman benar-benar kosong atau target tercapai.
+  const maxPages = Math.max(Math.ceil(targetReviews / 10) * 5, 50);
+  const lastPage = firstPage + maxPages - 1;
   let browser: Browser | null = null;
   let product: ScrapedProduct | null = null;
   const reviews: ScrapedReview[] = [];
@@ -282,18 +296,25 @@ export async function scrapeFemaleDailyProductPages(
     });
     page.setDefaultTimeout(45_000);
 
-    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+    // Hitung berapa halaman beruntun yang tidak menambah review unik baru.
+    // Dipakai sebagai pengaman supaya scraping berhenti hanya kalau benar-benar
+    // tidak ada review baru, bukan karena satu halaman kebetulan sedikit yang valid.
+    let consecutiveEmptyPages = 0;
+
+    for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
       const pageUrl = buildReviewPageUrl(sourceUrl, pageNumber);
 
       try {
         const result = await scrapeFemaleDailyProductPage(page, pageUrl, sourceUrl);
         product = product ?? result.product;
 
-        if (!result.reviews.length) {
+        // Halaman benar-benar tidak punya kartu review sama sekali => review habis.
+        if (result.rawReviewCount === 0) {
           stopReason = "NO_MORE_REVIEWS";
           break;
         }
 
+        let addedThisPage = 0;
         for (const review of result.reviews) {
           const key = [review.review_text.toLowerCase(), review.review_date ?? "", review.rating ?? ""].join(
             "::"
@@ -301,6 +322,7 @@ export async function scrapeFemaleDailyProductPages(
           if (seen.has(key)) continue;
           seen.add(key);
           reviews.push(review);
+          addedThisPage += 1;
           if (reviews.length >= targetReviews) break;
         }
 
@@ -315,9 +337,16 @@ export async function scrapeFemaleDailyProductPages(
           break;
         }
 
-        if (result.reviews.length < 10) {
-          stopReason = "NO_MORE_REVIEWS";
-          break;
+        // Tidak ada review unik baru di halaman ini. Bisa karena duplikat atau
+        // tersaring validasi. Beri toleransi beberapa halaman sebelum menyerah.
+        if (addedThisPage === 0) {
+          consecutiveEmptyPages += 1;
+          if (consecutiveEmptyPages >= 3) {
+            stopReason = "NO_MORE_REVIEWS";
+            break;
+          }
+        } else {
+          consecutiveEmptyPages = 0;
         }
 
         await page.waitForTimeout(3_000);
@@ -349,7 +378,7 @@ async function scrapeFemaleDailyProductPage(
   page: Awaited<ReturnType<Browser["newPage"]>>,
   pageUrl: string,
   sourceUrl: string
-): Promise<ScrapeResult> {
+): Promise<PageScrapeResult> {
   try {
     await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
@@ -522,12 +551,14 @@ async function scrapeFemaleDailyProductPage(
             category,
             source_url: window.location.href
           },
-          reviews
+          reviews,
+          rawReviewCount: containers.length
         };
       })()
     `)) as {
       product: ScrapedProduct;
       reviews: ScrapedReview[];
+      rawReviewCount: number;
     };
 
     const reviews = extracted.reviews
@@ -546,7 +577,8 @@ async function scrapeFemaleDailyProductPage(
         category: cleanText(extracted.product.category ?? "") || null,
         source_url: sourceUrl
       },
-      reviews
+      reviews,
+      rawReviewCount: extracted.rawReviewCount ?? 0
     };
   } catch (error) {
     if (error instanceof AppError) throw error;

@@ -8,9 +8,14 @@ type ExistingReview = {
   rating: number | null;
 };
 
-// Batas waktu keseluruhan satu job scraping. Kalau lewat, job ditandai gagal
-// supaya tidak menggantung di status "running" selamanya.
-const JOB_TIMEOUT_MS = 4 * 60 * 1000;
+// Batas waktu satu job scraping. Menyesuaikan target review supaya target besar
+// (mis. 250) tidak terpotong, tapi job yang benar-benar menggantung tetap dihentikan.
+function jobTimeoutMs(requestedReviews: number) {
+  const target = Number.isFinite(requestedReviews) ? requestedReviews : 10;
+  const estimatedPages = Math.ceil(Math.min(Math.max(target, 10), 250) / 10);
+  // ~9 detik per halaman (load + jeda 3 detik + margin) + buffer dasar 90 detik.
+  return 90_000 + estimatedPages * 9_000;
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, code: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -31,11 +36,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number, code: string): Promise<
   });
 }
 
+export type ScrapeMode = "refresh" | "continue";
+
 export async function runScrapeJob(
   jobId: string,
   ownerId: string,
   sourceUrl: string,
-  requestedReviews: number
+  requestedReviews: number,
+  mode: ScrapeMode = "refresh"
 ) {
   try {
     await updateJob(jobId, ownerId, {
@@ -44,14 +52,28 @@ export async function runScrapeJob(
       error_message: null
     });
 
+    // Mode "continue": mulai dari halaman yang lebih dalam berdasarkan jumlah
+    // review yang sudah tersimpan, supaya bisa menggali review lama (bukan hanya
+    // mengulang review terbaru di halaman 1). FemaleDaily ~10 review per halaman.
+    let startPage = 1;
+    if (mode === "continue") {
+      const existingCount = await countExistingReviews(ownerId, sourceUrl);
+      startPage = Math.floor(existingCount / 10) + 1;
+    }
+
     const result = await withTimeout(
-      scrapeFemaleDailyProductPages(sourceUrl, requestedReviews, async (progress) => {
-        await updateJob(jobId, ownerId, {
-          total_reviews: progress.collectedReviews,
-          requested_reviews: progress.requestedReviews
-        });
-      }),
-      JOB_TIMEOUT_MS,
+      scrapeFemaleDailyProductPages(
+        sourceUrl,
+        requestedReviews,
+        async (progress) => {
+          await updateJob(jobId, ownerId, {
+            total_reviews: progress.collectedReviews,
+            requested_reviews: progress.requestedReviews
+          });
+        },
+        startPage
+      ),
+      jobTimeoutMs(requestedReviews),
       "SCRAPE_TIMEOUT"
     );
     const product = await upsertProduct(ownerId, result.product);
@@ -161,4 +183,61 @@ function duplicateKey(review: ExistingReview) {
   return [review.review_text.trim().toLowerCase(), review.review_date ?? "", review.rating ?? ""].join(
     "::"
   );
+}
+
+async function countExistingReviews(ownerId: string, sourceUrl: string) {
+  const { data: productData, error: productError } = await getSupabase()
+    .from("products")
+    .select("id")
+    .eq("owner_id", ownerId)
+    .eq("source_url", sourceUrl)
+    .maybeSingle();
+
+  if (productError) throw new AppError("DATABASE_ERROR", 500, productError.message);
+  const product = productData as { id: string } | null;
+  if (!product) return 0;
+
+  const { count, error: countError } = await getSupabase()
+    .from("reviews")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", ownerId)
+    .eq("product_id", product.id);
+
+  if (countError) throw new AppError("DATABASE_ERROR", 500, countError.message);
+  return count ?? 0;
+}
+
+// Dipakai endpoint cek: apakah URL ini sudah pernah di-scrape owner & berapa
+// review tersimpan, supaya frontend bisa menawarkan refresh atau continue.
+export async function getProductScrapeState(ownerId: string, sourceUrl: string) {
+  const { data: productData, error: productError } = await getSupabase()
+    .from("products")
+    .select("id, product_name, brand_name")
+    .eq("owner_id", ownerId)
+    .eq("source_url", sourceUrl)
+    .maybeSingle();
+
+  if (productError) throw new AppError("DATABASE_ERROR", 500, productError.message);
+  const product = productData as
+    | { id: string; product_name: string; brand_name: string }
+    | null;
+
+  if (!product) {
+    return { exists: false, storedReviews: 0, productName: null, brandName: null };
+  }
+
+  const { count, error: countError } = await getSupabase()
+    .from("reviews")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", ownerId)
+    .eq("product_id", product.id);
+
+  if (countError) throw new AppError("DATABASE_ERROR", 500, countError.message);
+
+  return {
+    exists: true,
+    storedReviews: count ?? 0,
+    productName: product.product_name,
+    brandName: product.brand_name
+  };
 }

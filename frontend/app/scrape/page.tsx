@@ -10,12 +10,16 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { formatDate, formatJobStatus, formatStopReason, isFemaleDailyReviewUrl } from "@/lib/utils";
-import { getJob, getJobs, startScrape } from "@/lib/api";
+import { checkScrapeState, getJob, getJobs, startScrape, type ScrapeState } from "@/lib/api";
 import type { JobStatus, ScrapeJob } from "@/lib/types";
+
+type ScrapeMode = "refresh" | "continue";
 
 export default function ScrapePage() {
   const [url, setUrl] = useState("");
   const [maxReviews, setMaxReviews] = useState(10);
+  const [mode, setMode] = useState<ScrapeMode>("refresh");
+  const [scrapeState, setScrapeState] = useState<ScrapeState | null>(null);
   const [status, setStatus] = useState<JobStatus | "idle" | "validating">("idle");
   const [message, setMessage] = useState("Masukkan URL produk FemaleDaily untuk memulai job scraping.");
   const [error, setError] = useState("");
@@ -43,6 +47,34 @@ export default function ScrapePage() {
   useEffect(() => {
     void loadJobs();
   }, []);
+
+  // Cek apakah URL ini sudah pernah di-scrape owner, supaya bisa menawarkan
+  // mode refresh (ambil review terbaru) atau continue (gali lebih dalam).
+  useEffect(() => {
+    if (!url.trim() || !isFemaleDailyReviewUrl(url)) {
+      setScrapeState(null);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(() => {
+      checkScrapeState(url)
+        .then((state) => {
+          if (!active) return;
+          setScrapeState(state);
+          // Default tetap refresh; user bisa pindah ke continue kalau mau gali lebih dalam.
+          if (!state.exists) setMode("refresh");
+        })
+        .catch(() => {
+          if (active) setScrapeState(null);
+        });
+    }, 500);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [url]);
 
   useEffect(() => {
     if (!activeJobId) return;
@@ -122,7 +154,7 @@ export default function ScrapePage() {
     );
 
     try {
-      const result = await startScrape(url, normalizedMaxReviews);
+      const result = await startScrape(url, normalizedMaxReviews, mode);
       setStatus("running");
       setActiveJobId(result.jobId);
       setActiveJob({
@@ -188,6 +220,56 @@ export default function ScrapePage() {
                 Minimum 10, maksimum 250. Jika review produk habis lebih dulu, scraper berhenti otomatis.
               </span>
             </label>
+
+            {scrapeState?.exists ? (
+              <div className="grid gap-3 rounded-md border border-primary/30 bg-primary/5 p-4">
+                <div className="flex items-start gap-2">
+                  <SearchCheck size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                  <p className="text-sm leading-6 text-ink">
+                    Produk ini sudah pernah di-scrape
+                    {scrapeState.brandName || scrapeState.productName
+                      ? ` (${[scrapeState.brandName, scrapeState.productName].filter(Boolean).join(" - ")})`
+                      : ""}
+                    . Tersimpan <strong>{scrapeState.storedReviews}</strong> review. Pilih cara melanjutkan:
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-line bg-white p-3 transition hover:bg-primary/5">
+                    <input
+                      type="radio"
+                      name="scrape-mode"
+                      value="refresh"
+                      checked={mode === "refresh"}
+                      onChange={() => setMode("refresh")}
+                      disabled={isProcessing}
+                      className="mt-1 h-4 w-4 accent-primary"
+                    />
+                    <span className="text-sm leading-6">
+                      <span className="font-semibold text-ink">Refresh</span> — ambil review terbaru dari
+                      halaman awal. Review yang sudah ada tidak diduplikasi.
+                    </span>
+                  </label>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-line bg-white p-3 transition hover:bg-primary/5">
+                    <input
+                      type="radio"
+                      name="scrape-mode"
+                      value="continue"
+                      checked={mode === "continue"}
+                      onChange={() => setMode("continue")}
+                      disabled={isProcessing}
+                      className="mt-1 h-4 w-4 accent-primary"
+                    />
+                    <span className="text-sm leading-6">
+                      <span className="font-semibold text-ink">Lanjutkan</span> — gali review lebih lama,
+                      melanjutkan dari sekitar review ke-{scrapeState.storedReviews + 1}.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            ) : null}
+
             <div className="grid gap-3 sm:flex sm:flex-wrap">
               <Button
                 type="submit"
@@ -201,7 +283,11 @@ export default function ScrapePage() {
                 type="button"
                 variant="secondary"
                 className="w-full sm:w-auto"
-                onClick={() => setUrl("")}
+                onClick={() => {
+                  setUrl("");
+                  setScrapeState(null);
+                  setMode("refresh");
+                }}
               >
                 Clear
               </Button>

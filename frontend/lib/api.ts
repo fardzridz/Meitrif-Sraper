@@ -107,9 +107,29 @@ export async function getReviews(filters: {
   }
 }
 
-export async function startScrape(sourceUrl: string, maxReviews: number) {
-  return request<{ jobId: string; status: "running"; requestedReviews: number }>("/scrape", {
+export async function startScrape(
+  sourceUrl: string,
+  maxReviews: number,
+  mode: "refresh" | "continue" = "refresh"
+) {
+  return request<{
+    jobId: string;
+    status: "running";
+    requestedReviews: number;
+    mode: "refresh" | "continue";
+  }>("/scrape", {
     method: "POST",
-    body: JSON.stringify({ sourceUrl, maxReviews })
+    body: JSON.stringify({ sourceUrl, maxReviews, mode })
   });
+}
+
+export type ScrapeState = {
+  exists: boolean;
+  storedReviews: number;
+  productName: string | null;
+  brandName: string | null;
+};
+
+export async function checkScrapeState(sourceUrl: string): Promise<ScrapeState> {
+  return request<ScrapeState>(`/scrape/check?sourceUrl=${encodeURIComponent(sourceUrl)}`);
 }
