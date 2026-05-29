@@ -27,7 +27,7 @@ export async function getAnonymousSession(captchaToken?: string) {
   if (sessionData.session) return sessionData.session;
 
   if (!captchaToken) {
-    throw new Error("hCaptcha verification is required before starting an anonymous session");
+    throw new Error("Turnstile verification is required before starting an anonymous session");
   }
 
   if (!anonymousSessionPromise) {

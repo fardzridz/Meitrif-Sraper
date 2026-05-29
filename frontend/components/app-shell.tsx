@@ -1,6 +1,5 @@
 "use client";
 
-import HCaptcha from "@hcaptcha/react-hcaptcha";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +11,7 @@ import {
   Download,
   SearchCheck
 } from "lucide-react";
+import { Turnstile, type TurnstileHandle } from "@/components/turnstile";
 import { getAnonymousSession } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -23,12 +23,12 @@ const navItems = [
   { href: "/export", label: "Ekspor", icon: Download }
 ];
 
-const hcaptchaSiteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY;
+const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
-  const captchaRef = useRef<HCaptcha>(null);
+  const captchaRef = useRef<TurnstileHandle>(null);
   const [authState, setAuthState] = useState<"checking" | "captcha" | "authenticating" | "ready" | "failed">("checking");
   const [authError, setAuthError] = useState("");
   const [interactionLoading, setInteractionLoading] = useState(false);
@@ -44,7 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       })
       .catch((error) => {
         if (!active) return;
-        if (error instanceof Error && error.message.includes("hCaptcha")) {
+        if (error instanceof Error && error.message.includes("Turnstile")) {
           setAuthState("captcha");
           return;
         }
@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       await getAnonymousSession(token);
       setAuthState("ready");
     } catch (error) {
-      captchaRef.current?.resetCaptcha();
+      captchaRef.current?.reset();
       setAuthError(error instanceof Error ? error.message : "Anonymous auth failed");
       setAuthState("captcha");
     }
@@ -171,20 +171,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div>
                 <h1 className="font-semibold text-ink">Verifikasi akses</h1>
                 <p className="mt-2 text-sm leading-6 text-ink-muted">
-                  Selesaikan hCaptcha untuk membuat sesi anonim sebelum menggunakan scraper.
+                  Selesaikan verifikasi Turnstile untuk membuat sesi anonim sebelum menggunakan scraper.
                 </p>
               </div>
-              {hcaptchaSiteKey ? (
-                <HCaptcha
+              {turnstileSiteKey ? (
+                <Turnstile
                   ref={captchaRef}
-                  sitekey={hcaptchaSiteKey}
+                  siteKey={turnstileSiteKey}
                   onVerify={(token) => void handleCaptchaVerify(token)}
-                  onExpire={() => setAuthError("hCaptcha expired. Silakan verifikasi ulang.")}
-                  onError={() => setAuthError("hCaptcha gagal dimuat. Coba refresh halaman.")}
+                  onExpire={() => setAuthError("Verifikasi Turnstile kedaluwarsa. Silakan ulangi.")}
+                  onError={() => setAuthError("Turnstile gagal dimuat. Coba refresh halaman.")}
                 />
               ) : (
                 <p className="text-sm font-medium text-danger">
-                  NEXT_PUBLIC_HCAPTCHA_SITE_KEY belum dikonfigurasi.
+                  NEXT_PUBLIC_TURNSTILE_SITE_KEY belum dikonfigurasi.
                 </p>
               )}
               {authError ? <p className="text-sm font-medium text-danger">{authError}</p> : null}
