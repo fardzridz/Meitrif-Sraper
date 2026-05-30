@@ -1,0 +1,18 @@
+# Optional heavy ML dependencies for the real IndoBERT model + advanced NLP.
+# Install ONLY when you want true transformer-based inference instead of the
+# built-in lexicon fallback:
+#
+#   pip install -r requirements.txt -r requirements-ml.txt
+#
+# NOTE: torch + transformers are ~1GB+. Avoid on small Railway plans unless
+# you've sized the service accordingly.
+-r requirements.txt
+transformers==4.47.1
+torch==2.5.1
+sentencepiece==0.2.0
+keybert==0.8.5
+yake==0.4.8
+
+# Task queue (only needed if you move processing to a Celery worker).
+celery[redis]==5.4.0
+redis==5.2.1

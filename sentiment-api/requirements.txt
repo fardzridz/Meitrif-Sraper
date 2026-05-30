@@ -1,18 +1,14 @@
+# Core dependencies — lightweight, fast to build on Railway.
+# The NLP engine works out of the box with the built-in lexicon fallback,
+# so heavy ML libs (torch/transformers) are optional — see requirements-ml.txt.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 supabase==2.11.0
 python-jose[cryptography]==3.3.0
 sse-starlette==2.2.1
-transformers==4.47.1
-torch==2.5.1
-sentencepiece==0.2.0
 pandas==2.2.3
 openpyxl==3.1.5
 python-multipart==0.0.20
 pydantic==2.10.4
 pydantic-settings==2.7.1
 httpx==0.28.1
-celery[redis]==5.4.0
-redis==5.2.1
-keybert==0.8.5
-yake==0.4.8

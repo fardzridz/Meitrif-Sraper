@@ -2,8 +2,9 @@
 Keyword extraction and simple topic clustering.
 
 Keyword extraction uses term frequency with Indonesian stopword removal. This is
-dependency-free and fast. If you want higher quality keyphrases, swap in KeyBERT
-(already in requirements.txt) behind the same function signature.
+dependency-free and fast. If you want higher quality keyphrases, install the
+optional ML deps (requirements-ml.txt) and swap in KeyBERT behind the same
+function signature.
 
 Topic "modeling" here is a lightweight keyword-cluster approach: group texts by
 their most distinctive shared keywords. For production-grade topics, swap in

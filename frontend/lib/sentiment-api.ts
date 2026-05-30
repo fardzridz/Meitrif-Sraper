@@ -40,10 +40,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   }
 
-  const payload = (await response.json()) as ApiResponse<T>;
+  // Parse JSON defensively — error responses might not be valid JSON
+  // (e.g. proxy/gateway HTML error pages).
+  let payload: (ApiResponse<T> & { detail?: unknown }) | null = null;
+  try {
+    payload = (await response.json()) as ApiResponse<T> & { detail?: unknown };
+  } catch {
+    payload = null;
+  }
 
-  if (!response.ok || !payload.success || payload.data === undefined) {
-    throw new Error(payload.error ?? "Sentiment API request failed");
+  if (!response.ok || !payload || !payload.success || payload.data === undefined) {
+    // Surface the real reason in priority order:
+    //  1. our ApiResponse.error
+    //  2. FastAPI's HTTPException { detail }
+    //  3. HTTP status text
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : Array.isArray(payload?.detail)
+          ? JSON.stringify(payload?.detail)
+          : undefined;
+
+    const message =
+      payload?.error ??
+      detail ??
+      `Request gagal (HTTP ${response.status} ${response.statusText || ""})`.trim();
+
+    throw new Error(message);
   }
 
   return payload.data;
