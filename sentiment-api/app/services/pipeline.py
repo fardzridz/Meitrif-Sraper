@@ -52,13 +52,29 @@ def _collect_texts(analysis: dict, owner_id: str) -> list[tuple[str, Optional[st
 
     if source_type == "scraping":
         product_ids = config.get("product_ids", [])
+        rating_filter = config.get("rating_filter")
+        date_from = config.get("date_from")
+        date_to = config.get("date_to")
+
         query = (
             db.table("reviews")
-            .select("id, review_text")
+            .select("id, review_text, rating, review_date, created_at")
             .eq("owner_id", owner_id)
         )
         if product_ids:
             query = query.in_("product_id", product_ids)
+        if rating_filter:
+            try:
+                query = query.eq("rating", int(rating_filter))
+            except (TypeError, ValueError):
+                pass
+        # Date filters apply to created_at (when the review was scraped/stored).
+        if date_from:
+            query = query.gte("created_at", date_from)
+        if date_to:
+            # Include the whole end day.
+            query = query.lte("created_at", f"{date_to}T23:59:59")
+
         result = query.execute()
         return [
             (r["review_text"], r["id"])

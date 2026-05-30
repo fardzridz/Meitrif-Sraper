@@ -36,11 +36,25 @@ async def create_analysis(
             raise HTTPException(status_code=400, detail="Maximum 100 texts per manual input")
         total_texts = len(texts)
     elif body.source_type == "scraping":
-        # Count reviews from database
+        # Count reviews from database with the same filters the pipeline uses.
         product_ids = body.source_config.get("product_ids", [])
+        rating_filter = body.source_config.get("rating_filter")
+        date_from = body.source_config.get("date_from")
+        date_to = body.source_config.get("date_to")
+
         query = db.table("reviews").select("id", count="exact").eq("owner_id", owner_id)
         if product_ids:
             query = query.in_("product_id", product_ids)
+        if rating_filter:
+            try:
+                query = query.eq("rating", int(rating_filter))
+            except (TypeError, ValueError):
+                pass
+        if date_from:
+            query = query.gte("created_at", date_from)
+        if date_to:
+            query = query.lte("created_at", f"{date_to}T23:59:59")
+
         result = query.execute()
         total_texts = result.count or 0
         if total_texts == 0:

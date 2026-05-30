@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -9,14 +9,19 @@ import {
   FileUp,
   Globe,
   PenLine,
-  Rocket
+  Rocket,
+  Search
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { ScrapeTerminal } from "@/components/scrape-terminal";
+import { getProducts } from "@/lib/api";
 import { startAnalysis, streamAnalysisProgress } from "@/lib/sentiment-api";
+import type { Product } from "@/lib/types";
 import type { AnalysisLogEntry, AnalysisType, SourceType } from "@/lib/sentiment-types";
 
 type Step = "source" | "config" | "processing";
@@ -65,6 +70,16 @@ export default function NewAnalysisPage() {
   const [manualTexts, setManualTexts] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
 
+  // Scraping source filters
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [ratingFilter, setRatingFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
   // Config
   const [title, setTitle] = useState("");
   const [model, setModel] = useState("indobert");
@@ -75,6 +90,54 @@ export default function NewAnalysisPage() {
   const [logs, setLogs] = useState<AnalysisLogEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [analysisId, setAnalysisId] = useState("");
+
+  // Load products when scraping source is selected.
+  useEffect(() => {
+    if (sourceType !== "scraping") return;
+    let active = true;
+    setProductsLoading(true);
+    setProductsError("");
+    getProducts()
+      .then((data) => {
+        if (active) setProducts(data);
+      })
+      .catch((err) => {
+        if (active) setProductsError(err instanceof Error ? err.message : "Gagal memuat produk");
+      })
+      .finally(() => {
+        if (active) setProductsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [sourceType]);
+
+  const filteredProducts = products.filter((p) => {
+    const term = productSearch.toLowerCase();
+    if (!term) return true;
+    return [p.product_name, p.brand_name, p.category ?? ""]
+      .join(" ")
+      .toLowerCase()
+      .includes(term);
+  });
+
+  const selectedReviewCount = products
+    .filter((p) => selectedProductIds.includes(p.id))
+    .reduce((sum, p) => sum + (p.total_reviews || 0), 0);
+
+  function toggleProduct(id: string) {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    );
+  }
+
+  function selectAllFiltered() {
+    setSelectedProductIds(filteredProducts.map((p) => p.id));
+  }
+
+  function clearProductSelection() {
+    setSelectedProductIds([]);
+  }
 
   function toggleAnalysisType(type: AnalysisType) {
     setAnalysisTypes((prev) =>
@@ -94,7 +157,13 @@ export default function NewAnalysisPage() {
       case "url":
         return { url: sourceUrl };
       case "scraping":
-        return { product_ids: [] }; // Will be enhanced with product picker
+        return {
+          // Empty product_ids = analyze ALL reviews owned by the user.
+          product_ids: selectedProductIds,
+          rating_filter: ratingFilter || null,
+          date_from: dateFrom || null,
+          date_to: dateTo || null
+        };
       case "upload":
         return { dataset_id: "" }; // Will be enhanced with upload flow
       default:
@@ -267,11 +336,152 @@ export default function NewAnalysisPage() {
           )}
 
           {sourceType === "scraping" && (
-            <Card>
-              <p className="text-sm text-ink-muted">
-                Review dari hasil scraping FemaleDaily akan digunakan. Anda bisa memfilter berdasarkan
-                produk dan tanggal di langkah berikutnya.
-              </p>
+            <Card className="grid gap-5">
+              <div>
+                <h3 className="font-semibold text-ink">Pilih Produk untuk Dianalisis</h3>
+                <p className="mt-1 text-sm text-ink-muted">
+                  Pilih satu atau beberapa produk hasil scraping. Kosongkan pilihan untuk
+                  menganalisis <strong>semua review</strong> yang kamu punya.
+                </p>
+              </div>
+
+              {/* Search + bulk actions */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Cari produk atau brand..."
+                    className="h-10 w-full rounded-md border border-line bg-white pl-9 pr-3 text-sm text-ink placeholder:text-ink-muted focus:outline focus:outline-2 focus:outline-primary"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={selectAllFiltered}
+                  disabled={productsLoading || filteredProducts.length === 0}
+                >
+                  Pilih Semua
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={clearProductSelection}
+                  disabled={selectedProductIds.length === 0}
+                >
+                  Hapus Pilihan
+                </Button>
+              </div>
+
+              {/* Product list */}
+              {productsLoading ? (
+                <div className="grid gap-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16" />
+                  ))}
+                </div>
+              ) : productsError ? (
+                <EmptyState title="Gagal memuat produk" description={productsError} />
+              ) : products.length === 0 ? (
+                <EmptyState
+                  title="Belum ada produk"
+                  description="Kamu belum punya produk hasil scraping. Lakukan scraping dulu di menu Scraper."
+                />
+              ) : filteredProducts.length === 0 ? (
+                <EmptyState
+                  title="Tidak ada hasil"
+                  description={`Tidak ada produk yang cocok dengan "${productSearch}".`}
+                />
+              ) : (
+                <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+                  {filteredProducts.map((product) => {
+                    const selected = selectedProductIds.includes(product.id);
+                    return (
+                      <label
+                        key={product.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition ${
+                          selected ? "border-primary bg-primary/5" : "border-line hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleProduct(product.id)}
+                          className="mt-0.5 h-4 w-4 accent-primary"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-ink">
+                            {product.product_name}
+                          </span>
+                          <span className="block truncate text-xs text-ink-muted">
+                            {product.brand_name}
+                            {product.category ? ` · ${product.category}` : ""} ·{" "}
+                            {product.total_reviews} review
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Optional filters */}
+              <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-3">
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-ink">Filter Rating</span>
+                  <select
+                    value={ratingFilter}
+                    onChange={(e) => setRatingFilter(e.target.value)}
+                    className="h-10 rounded-md border border-line bg-white px-3 text-sm text-ink focus:outline focus:outline-2 focus:outline-primary"
+                  >
+                    <option value="">Semua rating</option>
+                    <option value="5">5 bintang</option>
+                    <option value="4">4 bintang</option>
+                    <option value="3">3 bintang</option>
+                    <option value="2">2 bintang</option>
+                    <option value="1">1 bintang</option>
+                  </select>
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-ink">Dari Tanggal</span>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="h-10 rounded-md border border-line bg-white px-3 text-sm text-ink focus:outline focus:outline-2 focus:outline-primary"
+                  />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-ink">Sampai Tanggal</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="h-10 rounded-md border border-line bg-white px-3 text-sm text-ink focus:outline focus:outline-2 focus:outline-primary"
+                  />
+                </label>
+              </div>
+
+              {/* Selection summary */}
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm text-ink">
+                {selectedProductIds.length === 0 ? (
+                  <span>
+                    Belum ada produk dipilih → akan menganalisis <strong>semua review</strong>.
+                  </span>
+                ) : (
+                  <span>
+                    <strong>{selectedProductIds.length}</strong> produk dipilih ·{" "}
+                    <strong>{selectedReviewCount}</strong> review akan dianalisis
+                    {ratingFilter ? ` · rating ${ratingFilter}★` : ""}.
+                  </span>
+                )}
+              </div>
             </Card>
           )}
 
