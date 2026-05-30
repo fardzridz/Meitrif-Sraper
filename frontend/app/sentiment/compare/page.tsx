@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { getAnalyses, getAnalysis } from "@/lib/sentiment-api";
+import { formatEmotion } from "@/lib/emotion-utils";
 import type { SentimentAnalysis } from "@/lib/sentiment-types";
 
 export default function ComparePage() {
@@ -141,7 +142,7 @@ export default function ComparePage() {
                       </div>
                     </div>
                     <p className="mt-2 text-xs text-ink-muted">
-                      Emosi dominan: {analysisA.summary.dominant_emotion}
+                      Emosi dominan: {formatEmotion(analysisA.summary.dominant_emotion)}
                     </p>
                   </>
                 )}
@@ -180,7 +181,7 @@ export default function ComparePage() {
                       </div>
                     </div>
                     <p className="mt-2 text-xs text-ink-muted">
-                      Emosi dominan: {analysisB.summary.dominant_emotion}
+                      Emosi dominan: {formatEmotion(analysisB.summary.dominant_emotion)}
                     </p>
                   </>
                 )}

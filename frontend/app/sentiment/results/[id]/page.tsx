@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAnalysis, getAnalysisResults, exportAnalysisCsv } from "@/lib/sentiment-api";
+import { EMOTION_EMOJI, EMOTION_LABEL, formatEmotion, formatSentiment } from "@/lib/emotion-utils";
 import type { SentimentAnalysis, SentimentResult } from "@/lib/sentiment-types";
 
 type Tab = "sentiment" | "emotions" | "aspects" | "keywords" | "topics" | "detail";
@@ -133,7 +134,9 @@ export default function ResultsPage() {
           <p className="mt-1 text-sm text-ink-muted">Positif</p>
         </Card>
         <Card className="text-center">
-          <p className="text-3xl font-bold text-ink">{summary?.dominant_emotion ?? "—"}</p>
+          <p className="text-3xl font-bold text-ink">
+            {summary?.dominant_emotion ? formatEmotion(summary.dominant_emotion) : "—"}
+          </p>
           <p className="mt-1 text-sm text-ink-muted">Emosi Dominan</p>
         </Card>
         <Card className="text-center">
@@ -186,7 +189,7 @@ export default function ResultsPage() {
               <h3 className="mb-4 font-semibold text-ink">Distribusi Sentiment</h3>
               <div className="grid gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="w-16 text-sm font-medium text-ink">Positif</span>
+                  <span className="w-20 text-sm font-medium text-ink">😊 Positif</span>
                   <div className="flex-1 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-6 rounded-full bg-emerald-500 transition-all"
@@ -198,7 +201,7 @@ export default function ResultsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="w-16 text-sm font-medium text-ink">Negatif</span>
+                  <span className="w-20 text-sm font-medium text-ink">😞 Negatif</span>
                   <div className="flex-1 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-6 rounded-full bg-red-500 transition-all"
@@ -210,7 +213,7 @@ export default function ResultsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="w-16 text-sm font-medium text-ink">Netral</span>
+                  <span className="w-20 text-sm font-medium text-ink">😐 Netral</span>
                   <div className="flex-1 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-6 rounded-full bg-slate-400 transition-all"
@@ -229,19 +232,19 @@ export default function ResultsPage() {
               <h3 className="mb-4 font-semibold text-ink">Jumlah per Sentiment</h3>
               <div className="grid gap-4">
                 <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
-                  <span className="text-sm font-medium text-emerald-700">Positif</span>
+                  <span className="text-sm font-medium text-emerald-700">😊 Positif</span>
                   <span className="text-xl font-bold text-emerald-700">
                     {summary?.sentiment_distribution?.positive ?? 0}
                   </span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-red-50 p-3">
-                  <span className="text-sm font-medium text-red-700">Negatif</span>
+                  <span className="text-sm font-medium text-red-700">😞 Negatif</span>
                   <span className="text-xl font-bold text-red-700">
                     {summary?.sentiment_distribution?.negative ?? 0}
                   </span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                  <span className="text-sm font-medium text-slate-700">Netral</span>
+                  <span className="text-sm font-medium text-slate-700">😐 Netral</span>
                   <span className="text-xl font-bold text-slate-700">
                     {summary?.sentiment_distribution?.neutral ?? 0}
                   </span>
@@ -261,9 +264,13 @@ export default function ResultsPage() {
                   .map(([emotion, count]) => {
                     const total = Object.values(summary.emotion_distribution).reduce((s, v) => s + v, 0);
                     const pct = total > 0 ? (count / total) * 100 : 0;
+                    const emoji = EMOTION_EMOJI[emotion] ?? "❓";
+                    const label = EMOTION_LABEL[emotion] ?? emotion;
                     return (
                       <div key={emotion} className="flex items-center gap-3">
-                        <span className="w-20 text-sm font-medium capitalize text-ink">{emotion}</span>
+                        <span className="w-28 text-sm font-medium text-ink">
+                          {emoji} {label}
+                        </span>
                         <div className="flex-1 overflow-hidden rounded-full bg-slate-100">
                           <div
                             className="h-5 rounded-full bg-blue-500 transition-all"
@@ -398,17 +405,13 @@ export default function ResultsPage() {
                               : "pending"
                         }
                       >
-                        {result.sentiment_label === "positive"
-                          ? "Positif"
-                          : result.sentiment_label === "negative"
-                            ? "Negatif"
-                            : "Netral"}
+                        {formatSentiment(result.sentiment_label)}
                       </Badge>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs text-ink-muted">
                       <span>Skor: {Math.round(result.sentiment_score * 100)}%</span>
                       {result.dominant_emotion && (
-                        <span>· Emosi: {result.dominant_emotion}</span>
+                        <span>· {formatEmotion(result.dominant_emotion)}</span>
                       )}
                       {result.keywords && result.keywords.length > 0 && (
                         <span>· Keywords: {result.keywords.slice(0, 3).join(", ")}</span>
