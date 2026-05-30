@@ -4,18 +4,21 @@ import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: {
-    default: "Metrif Scraper | FemaleDaily Review Dataset Tool",
-    template: "%s | Metrif Scraper"
+    default: "Metrif | Review Scraper & Sentiment Analysis Platform",
+    template: "%s | Metrif"
   },
   description:
-    "Metrif Scraper membantu mengumpulkan review produk FemaleDaily, memantau job scraping, dan mengekspor dataset CSV atau JSON untuk analisis.",
-  applicationName: "Metrif Scraper",
+    "Metrif membantu mengumpulkan review produk FemaleDaily dan menganalisis sentimen secara profesional menggunakan AI — dari scraping hingga insight visual.",
+  applicationName: "Metrif",
   keywords: [
-    "Metrif Scraper",
+    "Metrif",
     "FemaleDaily scraper",
     "review scraper",
-    "dataset review",
     "sentiment analysis",
+    "analisis sentimen",
+    "dataset review",
+    "NLP Indonesia",
+    "IndoBERT",
     "CSV export",
     "JSON export"
   ],
@@ -28,10 +31,10 @@ export const metadata: Metadata = {
     apple: "/brand/metrif-logo.svg"
   },
   openGraph: {
-    title: "Metrif Scraper",
+    title: "Metrif",
     description:
-      "Kumpulkan review FemaleDaily jadi dataset siap analisis dengan export CSV dan JSON.",
-    siteName: "Metrif Scraper",
+      "Scrape review FemaleDaily dan analisis sentimen profesional dengan AI.",
+    siteName: "Metrif",
     locale: "id_ID",
     type: "website",
     images: [
@@ -39,15 +42,15 @@ export const metadata: Metadata = {
         url: "/brand/metrif-logo.svg",
         width: 422,
         height: 463,
-        alt: "Metrif Scraper"
+        alt: "Metrif"
       }
     ]
   },
   twitter: {
     card: "summary",
-    title: "Metrif Scraper",
+    title: "Metrif",
     description:
-      "Kumpulkan review FemaleDaily jadi dataset siap analisis dengan export CSV dan JSON.",
+      "Scrape review FemaleDaily dan analisis sentimen profesional dengan AI.",
     images: ["/brand/metrif-logo.svg"]
   },
   robots: {

@@ -7,15 +7,20 @@ import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Box,
+  Brain,
   Database,
   Download,
-  SearchCheck
+  GitCompare,
+  History,
+  PlusCircle,
+  SearchCheck,
+  Settings
 } from "lucide-react";
 import { Turnstile, type TurnstileHandle } from "@/components/turnstile";
 import { getAnonymousSession } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const scraperNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/scrape", label: "Scrape", icon: SearchCheck },
   { href: "/products", label: "Produk", icon: Box },
@@ -23,11 +28,21 @@ const navItems = [
   { href: "/export", label: "Ekspor", icon: Download }
 ];
 
+const sentimentNavItems = [
+  { href: "/sentiment", label: "Overview", icon: BarChart3 },
+  { href: "/sentiment/new", label: "Analisis Baru", icon: PlusCircle },
+  { href: "/sentiment/history", label: "Riwayat", icon: History },
+  { href: "/sentiment/compare", label: "Bandingkan", icon: GitCompare },
+  { href: "/sentiment/settings", label: "Pengaturan", icon: Settings }
+];
+
 const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
+  const isSentimentSection = pathname.startsWith("/sentiment");
+  const navItems = isSentimentSection ? sentimentNavItems : scraperNavItems;
   const captchaRef = useRef<TurnstileHandle>(null);
   const [authState, setAuthState] = useState<"checking" | "captcha" | "authenticating" | "ready" | "failed">("checking");
   const [authError, setAuthError] = useState("");
@@ -109,7 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         >
           <Link
-            href={isLandingPage ? "/" : "/dashboard"}
+            href={isLandingPage ? "/" : isSentimentSection ? "/sentiment" : "/dashboard"}
             className="flex min-w-0 items-center gap-2 font-bold"
           >
             <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden">
@@ -121,21 +136,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 priority
               />
             </span>
-            <span className="truncate">Metrif Scraper</span>
+            <span className="truncate">
+              {isSentimentSection ? "Metrif Sentiment" : "Metrif Scraper"}
+            </span>
           </Link>
 
           {isLandingPage ? (
-            <Link
-              href="/dashboard"
-              className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-[#10231C] shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift"
-            >
-              Mulai Scraper
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:-translate-y-0.5 hover:bg-primary/10"
+              >
+                <SearchCheck size={15} aria-hidden="true" />
+                Scraper
+              </Link>
+              <Link
+                href="/sentiment"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-[#10231C] shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift"
+              >
+                <Brain size={15} aria-hidden="true" />
+                Sentiment
+              </Link>
+            </div>
           ) : (
             <nav className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Main navigation">
+              <Link
+                href="/"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-muted transition hover:bg-primary/10 hover:text-ink"
+                title="Kembali ke beranda"
+              >
+                ←
+              </Link>
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const active = pathname === item.href;
+                const active = pathname === item.href || (item.href !== "/sentiment" && pathname.startsWith(item.href + "/"));
                 return (
                   <Link
                     key={item.href}
