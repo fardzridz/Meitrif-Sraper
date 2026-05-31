@@ -75,18 +75,29 @@ https://your-railway-url.up.railway.app/docs
 
 ## Catatan soal Model
 
-Build default pakai **lexicon fallback** (ringan, cepat, tanpa torch). Ini cukup
-buat testing dan demo. Analisis tetap jalan dan kasih hasil yang masuk akal.
+`Dockerfile` saat ini meng-install `requirements-ml.txt` (torch + transformers)
+dan men-download IndoBERT saat build, jadi **default-nya pakai IndoBERT asli**.
 
-Kalau nanti mau pakai IndoBERT asli (model transformer), ganti baris install di
-`Dockerfile`:
+Cara memastikan IndoBERT benar-benar aktif (bukan diam-diam fallback ke lexicon):
+cek log startup/analisis di Railway console.
+- `IndoBERT model loaded: ...` → model asli aktif. ✅
+- `IndoBERT unavailable (...). Falling back to lexicon analyzer.` → yang jalan
+  cuma lexicon berbasis aturan, akurasi lebih rendah. ⚠️
+
+Selain itu, halaman hasil di frontend akan menampilkan peringatan kuning kalau
+analisis ternyata dijalankan dengan lexicon fallback (`is_fallback: true` di
+`summary`), jadi hasil lexicon tidak akan tersamar sebagai IndoBERT.
+
+Kalau mau hemat resource (tanpa torch/transformers), ganti baris install di
+`Dockerfile` agar hanya pakai core requirements:
 
 ```dockerfile
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-ml.txt
+RUN pip install --no-cache-dir -r requirements.txt
 ```
 
-Tapi hati-hati: torch + transformers ~1GB+, butuh plan Railway dengan RAM/disk
-lebih besar. Untuk sekarang (test), biarkan pakai core requirements saja.
+Konsekuensinya analisis akan jalan dengan lexicon fallback. Torch + transformers
+butuh ~1GB+, jadi pastikan plan Railway punya RAM/disk yang cukup untuk IndoBERT
+asli.
 
 ## Troubleshooting
 

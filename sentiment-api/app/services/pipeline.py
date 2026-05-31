@@ -145,7 +145,22 @@ def run_analysis(analysis_id: str, owner_id: str) -> None:
         # 2. Load analyzer.
         logger.info("[Analysis %s] Memuat model %s...", analysis_id[:8], analysis["model_used"])
         analyzer = get_analyzer(analysis["model_used"])
-        logger.info("[Analysis %s] Model siap. Mulai analisis...", analysis_id[:8])
+
+        # Determine which engine is *actually* serving predictions. The selected
+        # model can silently fall back to the lexicon if transformers/torch
+        # aren't available, so we surface the real backend instead of assuming
+        # IndoBERT just because it was chosen.
+        actual_backend = getattr(analyzer, "backend", analysis["model_used"])
+        if actual_backend == "lexicon-fallback":
+            logger.warning(
+                "[Analysis %s] PERHATIAN: model '%s' dipilih tapi yang aktif "
+                "adalah lexicon fallback (transformers/torch tidak tersedia). "
+                "Hasil TIDAK berasal dari IndoBERT asli.",
+                analysis_id[:8], analysis["model_used"],
+            )
+        else:
+            logger.info("[Analysis %s] Model siap (backend: %s). Mulai analisis...",
+                        analysis_id[:8], actual_backend)
 
         # 3. Prepare topic seeds if requested (needs the corpus up front).
         topics: list[dict] = []
@@ -236,6 +251,7 @@ def run_analysis(analysis_id: str, owner_id: str) -> None:
             corpus_keywords=corpus_keywords,
             topics=topics_summary,
             model_used=analysis["model_used"],
+            actual_backend=actual_backend,
             processing_time=elapsed,
         )
 

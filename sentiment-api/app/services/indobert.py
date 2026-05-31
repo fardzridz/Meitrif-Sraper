@@ -35,6 +35,16 @@ class IndoBertAnalyzer(SentimentAnalyzer):
         self._pipeline = None
         self._use_fallback = False
 
+    @property
+    def backend(self) -> str:
+        """Which engine is actually serving predictions: the real transformer
+        model ("indobert") or the rule-based lexicon ("lexicon-fallback").
+
+        This is the source of truth — callers should use it instead of assuming
+        IndoBERT is active just because the model was selected.
+        """
+        return "lexicon-fallback" if self._use_fallback else "indobert"
+
     def load(self) -> None:
         if self._pipeline is not None or self._use_fallback:
             return
@@ -70,19 +80,13 @@ class IndoBertAnalyzer(SentimentAnalyzer):
             return lexicon_sentiment(text)
 
         try:
-            result = self._pipeline(text[:512])[0]
+            # Let the pipeline handle truncation at the *token* level
+            # (max_length=512). Slicing by characters here would cut long
+            # reviews far too early (~80-100 words) and drop the sentiment-
+            # bearing tail (e.g. "...tapi ujung-ujungnya bikin breakout").
+            result = self._pipeline(text)[0]
             label = _LABEL_MAP.get(result["label"], "neutral")
             score = float(result["score"])
-
-            # Post-processing: correct for IndoBERT's positive bias.
-            # If model says positive but confidence is low-ish AND text has
-            # strong negative signals, use lexicon as a second opinion.
-            if label == "positive" and score < 0.85:
-                lex_label, lex_score = lexicon_sentiment(text)
-                if lex_label == "negative" and lex_score >= 0.65:
-                    # Lexicon strongly disagrees → trust lexicon
-                    return "negative", min(score, lex_score)
-
             return label, score
         except Exception as exc:  # pragma: no cover
             logger.warning("IndoBERT inference failed (%s), using lexicon.", exc)

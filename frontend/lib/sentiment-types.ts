@@ -53,6 +53,10 @@ export type AnalysisSummary = {
   auto_insight: string;
   processing_time_seconds: number;
   model_used: string;
+  /** Engine that actually produced the results. Differs from model_used when
+   * IndoBERT silently fell back to the rule-based lexicon. */
+  actual_backend?: string;
+  is_fallback?: boolean;
 };
 
 export type SentimentAnalysis = {

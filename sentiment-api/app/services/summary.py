@@ -24,6 +24,7 @@ def build_summary(
     topics: list[dict],
     model_used: str,
     processing_time: float,
+    actual_backend: str | None = None,
 ) -> dict:
     total = len(analyses)
     if total == 0:
@@ -82,6 +83,11 @@ def build_summary(
         ),
         "processing_time_seconds": round(processing_time, 1),
         "model_used": model_used,
+        # The engine that actually produced these results. May differ from
+        # model_used when IndoBERT falls back to the lexicon. Lets the UI warn
+        # the user instead of silently presenting lexicon output as IndoBERT.
+        "actual_backend": actual_backend or model_used,
+        "is_fallback": actual_backend == "lexicon-fallback",
     }
     return summary
 

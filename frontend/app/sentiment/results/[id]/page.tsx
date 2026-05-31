@@ -140,10 +140,37 @@ export default function ResultsPage() {
           <p className="mt-1 text-sm text-ink-muted">Emosi Dominan</p>
         </Card>
         <Card className="text-center">
-          <p className="text-3xl font-bold text-ink">{analysis.model_used}</p>
-          <p className="mt-1 text-sm text-ink-muted">Model</p>
+          <p className="text-3xl font-bold text-ink">
+            {summary?.is_fallback ? "Lexicon" : analysis.model_used}
+          </p>
+          <p className="mt-1 text-sm text-ink-muted">
+            {summary?.is_fallback ? `Model (fallback dari ${analysis.model_used})` : "Model"}
+          </p>
         </Card>
       </div>
+
+      {/* Fallback warning: results came from the rule-based lexicon, not the
+          real IndoBERT model. Surfaced so users don't mistake lexicon output
+          for transformer-grade accuracy. */}
+      {summary?.is_fallback && (
+        <Card className="mt-6 border-amber-300 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <span className="text-lg" aria-hidden="true">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                Hasil ini dari lexicon fallback, bukan IndoBERT
+              </p>
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                Model <strong>{analysis.model_used}</strong> dipilih, tapi
+                library transformers/torch tidak tersedia di server sehingga
+                analisis dijalankan dengan lexicon berbasis aturan. Akurasinya
+                lebih rendah dari IndoBERT asli. Pasang dependensi ML di server
+                untuk hasil penuh.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Auto Insight */}
       {summary?.auto_insight && (
