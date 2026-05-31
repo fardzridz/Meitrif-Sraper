@@ -75,6 +75,7 @@ def lexicon_sentiment(text: str) -> tuple[str, float]:
         return "neutral", 0.0
 
     score = 0
+    hits = 0
     for i, token in enumerate(tokens):
         weight = 0
         if token in POSITIVE_WORDS:
@@ -83,26 +84,30 @@ def lexicon_sentiment(text: str) -> tuple[str, float]:
             weight = -1
 
         if weight != 0:
+            hits += 1
             # Flip polarity if preceded by a negator within 2 tokens.
             window = tokens[max(0, i - 2):i]
             if any(w in NEGATORS for w in window):
                 weight *= -1
             score += weight
 
-    total_hits = sum(
-        1 for t in tokens if t in POSITIVE_WORDS or t in NEGATIVE_WORDS
-    )
+    if hits == 0:
+        # No polarity words found → neutral with low confidence.
+        return "neutral", 0.55
+
+    # Scale confidence based on how many polarity words were found and how
+    # strongly they lean one way. More hits + stronger lean = higher confidence.
+    magnitude = abs(score)
+    # Base 0.55, each net hit adds ~0.08, capped at 0.95.
+    confidence = min(0.55 + 0.08 * magnitude + 0.02 * hits, 0.95)
 
     if score > 0:
-        confidence = min(0.5 + 0.1 * score, 0.95)
-        return "positive", confidence
+        return "positive", round(confidence, 2)
     if score < 0:
-        confidence = min(0.5 + 0.1 * abs(score), 0.95)
-        return "negative", confidence
+        return "negative", round(confidence, 2)
 
-    # No polarity hits → neutral with low confidence.
-    confidence = 0.6 if total_hits == 0 else 0.5
-    return "neutral", confidence
+    # Equal positive and negative hits → neutral, moderate confidence.
+    return "neutral", round(0.5 + 0.03 * hits, 2)
 
 
 def lexicon_emotion(text: str) -> tuple[dict[str, float], str]:

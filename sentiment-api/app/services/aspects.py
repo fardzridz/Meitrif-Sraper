@@ -19,14 +19,14 @@ from .base import AspectSentiment
 
 # Aspect → trigger keywords. Tuned for skincare/beauty reviews (FemaleDaily).
 ASPECT_KEYWORDS: dict[str, set[str]] = {
-    "harga": {"harga", "mahal", "murah", "worth", "value", "harganya", "kemahalan", "terjangkau"},
-    "kualitas": {"kualitas", "bagus", "jelek", "berkualitas", "awet", "tahan", "premium"},
-    "pengiriman": {"pengiriman", "kirim", "ongkir", "kurir", "paket", "sampai", "lama", "cepat", "packing", "packaging"},
+    "harga": {"harga", "mahal", "murah", "worth", "value", "harganya", "kemahalan", "terjangkau", "promo", "diskon", "flashsale"},
+    "kualitas": {"kualitas", "berkualitas", "awet", "tahan", "premium", "original", "asli"},
+    "pengiriman": {"pengiriman", "kirim", "ongkir", "kurir", "paket", "sampai", "packing", "packaging", "ekspedisi"},
     "pelayanan": {"pelayanan", "cs", "admin", "seller", "respon", "ramah", "fast", "service"},
-    "kemasan": {"kemasan", "botol", "tutup", "packaging", "segel", "bocor", "kemasannya"},
-    "aroma": {"aroma", "wangi", "bau", "harum", "parfum", "scent", "baunya"},
-    "tekstur": {"tekstur", "lengket", "lembut", "halus", "kasar", "cair", "kental", "creamy"},
-    "hasil": {"hasil", "ampuh", "manjur", "glowing", "jerawat", "breakout", "iritasi", "alergi", "cocok", "efek"},
+    "kemasan": {"kemasan", "botol", "tutup", "segel", "bocor", "kemasannya", "box"},
+    "aroma": {"aroma", "wangi", "bau", "harum", "parfum", "scent", "baunya", "wanginya", "semerbak"},
+    "tekstur": {"tekstur", "lengket", "lembut", "halus", "kasar", "cair", "kental", "creamy", "teksturnya", "lembuttt", "lembutt"},
+    "hasil": {"hasil", "ampuh", "manjur", "glowing", "jerawat", "breakout", "iritasi", "alergi", "cocok", "efek", "cerah", "mencerahkan"},
 }
 
 _SENT_SPLIT_RE = re.compile(r"[.!?;,\n]| tapi | tetapi | namun | sedangkan | dan | serta ")
