@@ -72,7 +72,18 @@ class IndoBertAnalyzer(SentimentAnalyzer):
         try:
             result = self._pipeline(text[:512])[0]
             label = _LABEL_MAP.get(result["label"], "neutral")
-            return label, float(result["score"])
+            score = float(result["score"])
+
+            # Post-processing: correct for IndoBERT's positive bias.
+            # If model says positive but confidence is low-ish AND text has
+            # strong negative signals, use lexicon as a second opinion.
+            if label == "positive" and score < 0.85:
+                lex_label, lex_score = lexicon_sentiment(text)
+                if lex_label == "negative" and lex_score >= 0.65:
+                    # Lexicon strongly disagrees → trust lexicon
+                    return "negative", min(score, lex_score)
+
+            return label, score
         except Exception as exc:  # pragma: no cover
             logger.warning("IndoBERT inference failed (%s), using lexicon.", exc)
             return lexicon_sentiment(text)
