@@ -18,6 +18,7 @@ import re
 from typing import Callable
 
 from .base import AspectSentiment
+from .lexicon import POSITIVE_WORDS
 
 # Aspect → trigger keywords. Tuned for skincare/beauty reviews (FemaleDaily).
 ASPECT_KEYWORDS: dict[str, set[str]] = {
@@ -72,29 +73,29 @@ def _find_aspect_context(text_lower: str, keywords: set[str]) -> str | None:
     return None
 
 
-def _has_negation_near_keyword(context: str, keywords: set[str]) -> bool:
+def _has_negated_positive(context: str) -> bool:
     """
-    Check if there's a negation word within 3 words of any aspect keyword.
-    E.g., "wanginya KURANG awet" → negation near "wangi"
+    Check if there's a negation word immediately followed (within 2 words) by a
+    POSITIVE word. This is the only case that should flip a positive result.
+
+    Examples:
+      "wanginya KURANG awet"  → negation 'kurang' + positive 'awet' → TRUE (flip)
+      "ga WANGI"              → negation 'ga' + positive 'wangi'    → TRUE (flip)
+      "nggak LENGKET"         → negation 'nggak' + negative 'lengket' → FALSE (don't flip)
+      "ga NORAK"              → negation 'ga' + negative 'norak'    → FALSE (don't flip)
+
+    By only flipping negated POSITIVE words, we avoid the double-negation trap
+    where "nggak lengket" (good) gets wrongly marked negative.
     """
     words = context.lower().split()
-    keyword_positions = []
-    negation_positions = []
+    cleaned = [re.sub(r"[^a-z]", "", w) for w in words]
 
-    for i, word in enumerate(words):
-        # Strip common suffixes for matching
-        clean = re.sub(r"[^a-z]", "", word)
-        if clean in NEGATION_WORDS:
-            negation_positions.append(i)
-        if any(kw in word for kw in keywords):
-            keyword_positions.append(i)
-
-    # Check if any negation is within 3 words of a keyword
-    for kp in keyword_positions:
-        for np in negation_positions:
-            if abs(kp - np) <= 3:
-                return True
-
+    for i, word in enumerate(cleaned):
+        if word in NEGATION_WORDS:
+            # Look at the next 2 words for a positive term
+            for j in range(i + 1, min(i + 3, len(cleaned))):
+                if cleaned[j] in POSITIVE_WORDS:
+                    return True
     return False
 
 
@@ -132,17 +133,12 @@ def extract_aspects(
         # Run sentiment on the context
         label, score = sentiment_fn(context)
 
-        # Apply negation correction: if there's a negation near the keyword
-        # and the model says positive, flip it to negative
-        has_negation = _has_negation_near_keyword(context, keywords)
-
-        if has_negation and label == "positive":
+        # Negation correction — but ONLY flip when a POSITIVE word is negated.
+        # This catches "wanginya kurang awet" (bad) without breaking
+        # "nggak lengket" / "ga norak" (good).
+        if label == "positive" and _has_negated_positive(context):
             label = "negative"
-            # Reduce confidence slightly since we're overriding the model
             score = max(score * 0.85, 0.5)
-        elif has_negation and label == "neutral":
-            label = "negative"
-            score = 0.6
 
         results.append(AspectSentiment(aspect=aspect, sentiment=label, score=score))
 

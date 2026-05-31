@@ -22,6 +22,7 @@ POSITIVE_WORDS = {
     "oke", "ok", "top", "terbaik", "hebat", "cinta", "love", "cocok", "lembut",
     "wangi", "halus", "cantik", "glowing", "ampuh", "manjur", "berhasil", "senang",
     "happy", "amazing", "perfect", "sempurna", "favorit", "andalan", "juara",
+    "awet", "tahan", "harum", "segar", "seger", "lembab", "lembap", "cerah",
 }
 
 NEGATIVE_WORDS = {

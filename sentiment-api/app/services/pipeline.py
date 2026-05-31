@@ -35,7 +35,7 @@ from .summary import build_summary
 logger = logging.getLogger(__name__)
 
 # How often to flush progress to the DB (every N texts).
-PROGRESS_BATCH = 10
+PROGRESS_BATCH = 5
 
 
 def _collect_texts(analysis: dict, owner_id: str) -> list[tuple[str, Optional[str]]]:
@@ -120,22 +120,32 @@ def run_analysis(analysis_id: str, owner_id: str) -> None:
     started = datetime.now(timezone.utc)
 
     try:
+        logger.info("=" * 50)
+        logger.info("[Analysis %s] START", analysis_id[:8])
+        logger.info("[Analysis %s] Model: %s | Types: %s",
+                    analysis_id[:8], analysis["model_used"], sorted(analysis_types))
+
         db.table("sentiment_analyses").update(
             {"status": "loading", "started_at": started.isoformat()}
         ).eq("id", analysis_id).execute()
 
         # 1. Collect texts.
+        logger.info("[Analysis %s] Mengumpulkan teks dari sumber '%s'...",
+                    analysis_id[:8], analysis["source_type"])
         texts = _collect_texts(analysis, owner_id)
         total = len(texts)
         if total == 0:
             raise ValueError("Tidak ada teks untuk dianalisis.")
+        logger.info("[Analysis %s] %d teks siap dianalisis", analysis_id[:8], total)
 
         db.table("sentiment_analyses").update(
             {"status": "processing", "total_texts": total, "processed_texts": 0}
         ).eq("id", analysis_id).execute()
 
         # 2. Load analyzer.
+        logger.info("[Analysis %s] Memuat model %s...", analysis_id[:8], analysis["model_used"])
         analyzer = get_analyzer(analysis["model_used"])
+        logger.info("[Analysis %s] Model siap. Mulai analisis...", analysis_id[:8])
 
         # 3. Prepare topic seeds if requested (needs the corpus up front).
         topics: list[dict] = []
@@ -184,6 +194,11 @@ def run_analysis(analysis_id: str, owner_id: str) -> None:
                     {"processed_texts": processed}
                 ).eq("id", analysis_id).execute()
 
+                # Log progress so Railway console shows it's alive.
+                pct = processed / total * 100
+                logger.info("[Analysis %s] Progress: %d/%d (%.0f%%)",
+                            analysis_id[:8], processed, total, pct)
+
                 # Check for cancellation.
                 status_check = (
                     db.table("sentiment_analyses")
@@ -193,7 +208,8 @@ def run_analysis(analysis_id: str, owner_id: str) -> None:
                     .execute()
                 )
                 if status_check.data and status_check.data["status"] == "cancelled":
-                    logger.info("Analysis %s cancelled mid-run", analysis_id)
+                    logger.info("[Analysis %s] DIBATALKAN oleh user di %d/%d",
+                                analysis_id[:8], processed, total)
                     return
 
         # Flush remaining rows.
@@ -232,10 +248,12 @@ def run_analysis(analysis_id: str, owner_id: str) -> None:
             }
         ).eq("id", analysis_id).execute()
 
-        logger.info("Analysis %s completed: %d texts in %.1fs", analysis_id, total, elapsed)
+        logger.info("[Analysis %s] SELESAI ✓ %d teks dalam %.1f detik (%.2f detik/teks)",
+                    analysis_id[:8], total, elapsed, elapsed / total if total else 0)
+        logger.info("=" * 50)
 
     except Exception as exc:
-        logger.exception("Analysis %s failed", analysis_id)
+        logger.exception("[Analysis %s] GAGAL: %s", analysis_id[:8], exc)
         db.table("sentiment_analyses").update(
             {
                 "status": "failed",

@@ -2,12 +2,22 @@
 Metrif Sentiment Analysis API — FastAPI application entry point.
 """
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .models import ApiResponse
 from .routers import analysis, api_keys, export, models, upload
+
+# Configure logging so our pipeline INFO logs show up in Railway console.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+# Ensure our app loggers propagate at INFO even under uvicorn.
+logging.getLogger("app").setLevel(logging.INFO)
 
 app = FastAPI(
     title="Metrif Sentiment API",
